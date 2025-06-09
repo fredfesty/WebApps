@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mortgage Early Repayment Savings Calculator</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap');
+
+        :root {
+            --primary-color: #3498db; /* A calming blue */
+            --secondary-color: #2ecc71; /* A positive green */
+            --background-color: #f4f7f6;
+            --card-background: #ffffff;
+            --text-color: #333333;
+            --input-border-color: #dddddd;
+            --shadow-color: rgba(0, 0, 0, 0.1);
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            line-height: 1.6;
+        }
+
+        .container {
+            background-color: var(--card-background);
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px var(--shadow-color);
+            width: 100%;
+            max-width: 900px;
+            margin-bottom: 30px;
+            transition: all 0.3s ease-in-out;
+        }
+
+        .container:hover {
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.15);
+        }
+
+        h1 {
+            color: var(--primary-color);
+            text-align: center;
+            margin-bottom: 30px;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        label {
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: var(--primary-color);
+        }
+
+        input[type="number"], select {
+            padding: 12px;
+            border: 1px solid var(--input-border-color);
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        input[type="number"]:focus, select:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
+            outline: none;
+        }
+
+        .overpayment-type-toggle {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .overpayment-type-toggle label {
+            margin-bottom: 0;
+            margin-right: 10px;
+        }
+        
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 34px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: var(--secondary-color);
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+        
+        .overpayment-unit {
+            margin-left: 5px;
+            font-weight: bold;
+        }
+
+
+        button#calculateBtn {
+            background-color: var(--secondary-color);
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        button#calculateBtn:hover {
+            background-color: #27ae60; /* Darker green */
+            transform: translateY(-2px);
+        }
+
+        #results {
+            margin-top: 30px;
+            padding: 20px;
+            background-color: #eaf6ff; /* Light blue accent */
+            border-radius: 10px;
+            border-left: 5px solid var(--primary-color);
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.5s ease-in-out, transform 0.5s ease-in-out;
+        }
+        
+        #results.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        #results h2 {
+            color: var(--primary-color);
+            margin-top: 0;
+            text-align: center;
+        }
+        
+        .summary-stats {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 20px;
+            text-align: center;
+            flex-wrap: wrap;
+        }
+
+        .stat {
+            padding: 10px;
+        }
+
+        .stat p {
+            margin: 5px 0;
+            font-size: 1.1em;
+        }
+
+        .stat .value {
+            font-size: 1.8em;
+            font-weight: 700;
+            color: var(--secondary-color);
+        }
+        
+        .stat .original-value {
+            font-size: 0.9em;
+            color: #7f8c8d;
+            text-decoration: line-through;
+        }
+
+        #savingsChartContainer {
+            width: 100%;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 10px;
+            background: var(--card-background);
+            border-radius: 8px;
+            box-shadow: 0 5px 15px var(--shadow-color);
+        }
+
+        /* Animation for input fields on load */
+        .form-group {
+            opacity: 0;
+            transform: translateY(10px);
+            animation: fadeInUp 0.5s ease-out forwards;
+        }
+
+        .form-group:nth-child(1) { animation-delay: 0.1s; }
+        .form-group:nth-child(2) { animation-delay: 0.2s; }
+        .form-group:nth-child(3) { animation-delay: 0.3s; }
+        .form-group:nth-child(4) { animation-delay: 0.4s; }
+        .form-group:nth-child(5) { animation-delay: 0.5s; }
+        .form-group:nth-child(6) { animation-delay: 0.6s; }
+
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .error-message {
+            color: red;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 15px;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .form-grid {
+                grid-template-columns: 1fr; /* Stack form elements on smaller screens */
+            }
+            h1 {
+                font-size: 1.8em;
+            }
+            .summary-stats {
+                flex-direction: column;
+                align-items: center;
+            }
+            .stat {
+                margin-bottom: 15px;
+            }
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1><i class="fas fa-piggy-bank" style="margin-right: 10px;"></i>Mortgage Early Repayment Savings Calculator</h1>
+        <div id="errorDisplay" class="error-message"></div>
+        <form id="mortgageForm">
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="principal">Mortgage Principal (£):</label>
+                    <input type="number" id="principal" value="200000" step="1000" required>
+                </div>
+                <div class="form-group">
+                    <label for="interestRate">Annual Interest Rate (%):</label>
+                    <input type="number" id="interestRate" value="3.5" step="0.01" required>
+                </div>
+                <div class="form-group">
+                    <label for="loanTerm">Loan Term (Years):</label>
+                    <input type="number" id="loanTerm" value="25" step="1" required>
+                </div>
+                <div class="form-group">
+                    <label for="fixedRatePeriod">Fixed Rate Period (Years):</label>
+                    <input type="number" id="fixedRatePeriod" value="5" step="1" required>
+                </div>
+                <div class="form-group">
+                    <label for="overpaymentValue">Overpayment Amount:</label>
+                    <input type="number" id="overpaymentValue" value="100" step="10" required>
+                </div>
+                <div class="form-group">
+                    <label>Overpayment Type:</label>
+                    <div class="overpayment-type-toggle">
+                        <span style="margin-right: 8px;">Percentage (%)</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="overpaymentTypeToggle" checked> <!-- Checked = Absolute -->
+                            <span class="slider"></span>
+                        </label>
+                        <span style="margin-left: 8px;">Absolute (£)</span>
+                    </div>
+                    <span id="overpaymentInputUnit" class="overpayment-unit">£</span>
+                </div>
+            </div>
+            <button type="button" id="calculateBtn">Calculate Savings</button>
+        </form>
+    </div>
+
+    <div id="results" class="container">
+        <h2>Results Summary</h2>
+        <div class="summary-stats">
+            <div class="stat">
+                <p>Total Interest Saved (Fixed Period):</p>
+                <span id="totalSavings" class="value">£0.00</span>
+            </div>
+            <div class="stat">
+                <p>New Balance (End of Fixed Period):</p>
+                <span id="newBalance" class="value">£0.00</span>
+                <p id="originalBalanceInfo" class="original-value">Original: £0.00</p>
+            </div>
+            <div class="stat">
+                <p>Time Saved on Full Loan:</p>
+                <span id="timeSaved" class="value">0 years 0 months</span>
+            </div>
+        </div>
+        <div id="savingsChartContainer">
+            <canvas id="savingsChart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        const principalInput = document.getElementById('principal');
+        const interestRateInput = document.getElementById('interestRate');
+        const loanTermInput = document.getElementById('loanTerm');
+        const fixedRatePeriodInput = document.getElementById('fixedRatePeriod');
+        const overpaymentValueInput = document.getElementById('overpaymentValue');
+        const overpaymentTypeToggle = document.getElementById('overpaymentTypeToggle');
+        const overpaymentInputUnit = document.getElementById('overpaymentInputUnit');
+        const calculateBtn = document.getElementById('calculateBtn');
+        const resultsDiv = document.getElementById('results');
+        const totalSavingsDisplay = document.getElementById('totalSavings');
+        const newBalanceDisplay = document.getElementById('newBalance');
+        const originalBalanceInfoDisplay = document.getElementById('originalBalanceInfo');
+        const timeSavedDisplay = document.getElementById('timeSaved');
+        const errorDisplay = document.getElementById('errorDisplay');
+
+        let savingsChartInstance = null;
+
+        // Update overpayment unit display based on toggle
+        overpaymentTypeToggle.addEventListener('change', () => {
+            if (overpaymentTypeToggle.checked) { // Absolute
+                overpaymentInputUnit.textContent = '£';
+            } else { // Percentage
+                overpaymentInputUnit.textContent = '%';
+            }
+        });
+        
+        function validateInputs() {
+            errorDisplay.textContent = '';
+            let isValid = true;
+            const inputs = [
+                { el: principalInput, name: "Principal", min: 1000 },
+                { el: interestRateInput, name: "Interest Rate", min: 0.01, max: 25 },
+                { el: loanTermInput, name: "Loan Term", min: 1, max: 50 },
+                { el: fixedRatePeriodInput, name: "Fixed Rate Period", min: 1, max: 50 },
+                { el: overpaymentValueInput, name: "Overpayment Value", min: 0 }
+            ];
+
+            for (const input of inputs) {
+                const val = parseFloat(input.el.value);
+                if (isNaN(val) || (input.min !== undefined && val < input.min) || (input.max !== undefined && val > input.max)) {
+                    errorDisplay.textContent += `${input.name} is invalid. Must be between ${input.min || 0} and ${input.max || 'any reasonable value'}. `;
+                    isValid = false;
+                }
+            }
+            
+            if (parseFloat(fixedRatePeriodInput.value) > parseFloat(loanTermInput.value)) {
+                 errorDisplay.textContent += "Fixed rate period cannot be longer than loan term. ";
+                 isValid = false;
+            }
+
+            if (!overpaymentTypeToggle.checked && parseFloat(overpaymentValueInput.value) > 100) { // Percentage
+                errorDisplay.textContent += "Percentage overpayment cannot exceed 100%. ";
+                isValid = false;
+            }
+            
+            return isValid;
+        }
+
+
+        calculateBtn.addEventListener('click', () => {
+            if (!validateInputs()) {
+                resultsDiv.classList.remove('visible');
+                return;
+            }
+
+            const principal = parseFloat(principalInput.value);
+            const annualInterestRate = parseFloat(interestRateInput.value) / 100;
+            const loanTermYears = parseInt(loanTermInput.value);
+            const fixedRatePeriodYears = parseInt(fixedRatePeriodInput.value);
+            let overpaymentValue = parseFloat(overpaymentValueInput.value);
+            const isOverpaymentAbsolute = overpaymentTypeToggle.checked;
+
+            const monthlyInterestRate = annualInterestRate / 12;
+            const totalLoanMonths = loanTermYears * 12;
+            const fixedPeriodMonths = fixedRatePeriodYears * 12;
+
+            // --- Calculate Standard Monthly Payment (EMI) ---
+            // M = P [ i(1 + i)^n ] / [ (1 + i)^n – 1]
+            let standardMonthlyPayment;
+            if (monthlyInterestRate > 0) {
+                 standardMonthlyPayment = principal * (monthlyInterestRate * Math.pow(1 + monthlyInterestRate, totalLoanMonths)) / (Math.pow(1 + monthlyInterestRate, totalLoanMonths) - 1);
+            } else { // Interest-free loan
+                standardMonthlyPayment = principal / totalLoanMonths;
+            }
+
+            let actualOverpaymentAmount = 0;
+            if (isOverpaymentAbsolute) {
+                actualOverpaymentAmount = overpaymentValue;
+            } else { // Percentage
+                actualOverpaymentAmount = (overpaymentValue / 100) * standardMonthlyPayment;
+            }
+
+            // --- Simulate mortgage WITHOUT overpayment for fixed period ---
+            let balanceNoOverpayment = principal;
+            let totalInterestPaidNoOverpayment = 0;
+            const cumulativeSavingsData = [];
+            const balanceNoOverpaymentHistory = [principal];
+
+            for (let month = 1; month <= fixedPeriodMonths; month++) {
+                const interestThisMonth = balanceNoOverpayment * monthlyInterestRate;
+                const principalPaidThisMonth = standardMonthlyPayment - interestThisMonth;
+                balanceNoOverpayment -= principalPaidThisMonth;
+                totalInterestPaidNoOverpayment += interestThisMonth;
+                balanceNoOverpaymentHistory.push(balanceNoOverpayment);
+            }
+
+            // --- Simulate mortgage WITH overpayment for fixed period ---
+            let balanceWithOverpayment = principal;
+            let totalInterestPaidWithOverpayment = 0;
+            const balanceWithOverpaymentHistory = [principal];
+
+            for (let month = 1; month <= fixedPeriodMonths; month++) {
+                const interestThisMonth = balanceWithOverpayment * monthlyInterestRate;
+                let principalPaidThisMonth = standardMonthlyPayment - interestThisMonth;
+                
+                // Apply overpayment
+                let currentOverpayment = actualOverpaymentAmount;
+                // Ensure overpayment doesn't exceed remaining balance + interest for this month
+                if ( (principalPaidThisMonth + currentOverpayment) > (balanceWithOverpayment - interestThisMonth) && (balanceWithOverpayment - interestThisMonth) > 0) {
+                     currentOverpayment = (balanceWithOverpayment - interestThisMonth) - principalPaidThisMonth;
+                } else if (balanceWithOverpayment <=0) {
+                    currentOverpayment = 0; // No more overpayment if balance is zero or less
+                }
+
+                principalPaidThisMonth += currentOverpayment;
+
+                balanceWithOverpayment -= principalPaidThisMonth;
+                if (balanceWithOverpayment < 0) balanceWithOverpayment = 0; // Cannot go below zero
+                totalInterestPaidWithOverpayment += interestThisMonth;
+                
+                balanceWithOverpaymentHistory.push(balanceWithOverpayment);
+
+                const cumulativeInterestWithout = calculateCumulativeInterest(principal, annualInterestRate, loanTermYears, month, 0);
+                const cumulativeInterestWith = calculateCumulativeInterest(principal, annualInterestRate, loanTermYears, month, actualOverpaymentAmount);
+                cumulativeSavingsData.push(cumulativeInterestWithout - cumulativeInterestWith);
+            }
+
+            const totalSavings = totalInterestPaidNoOverpayment - totalInterestPaidWithOverpayment;
+
+            // --- Calculate time saved on the full loan ---
+            let monthsToRepayWithOverpayment = 0;
+            let tempBalance = principal;
+            while (tempBalance > 0 && monthsToRepayWithOverpayment < totalLoanMonths * 2) { // Safety break
+                const interest = tempBalance * monthlyInterestRate;
+                let principalPaid = standardMonthlyPayment - interest + actualOverpaymentAmount;
+                if (principalPaid <= 0 && tempBalance > 0) principalPaid = tempBalance; // Pay off remaining if payment is small
+                tempBalance -= principalPaid;
+                monthsToRepayWithOverpayment++;
+                if (tempBalance < 0.01) tempBalance = 0; // Consider paid off
+            }
+            
+            const timeSavedMonths = totalLoanMonths - monthsToRepayWithOverpayment;
+            const timeSavedYears = Math.floor(timeSavedMonths / 12);
+            const timeSavedRemainingMonths = timeSavedMonths % 12;
+
+
+            // --- Display Results ---
+            totalSavingsDisplay.textContent = `£${totalSavings.toFixed(2)}`;
+            newBalanceDisplay.textContent = `£${balanceWithOverpayment.toFixed(2)}`;
+            originalBalanceInfoDisplay.textContent = `Original (No Overpayment): £${balanceNoOverpayment.toFixed(2)}`;
+            timeSavedDisplay.textContent = `${timeSavedYears} years ${timeSavedRemainingMonths} months`;
+
+            resultsDiv.classList.add('visible');
+            
+            // --- Update Chart ---
+            const labels = Array.from({ length: fixedPeriodMonths + 1 }, (_, i) => `Month ${i}`);
+            if (savingsChartInstance) {
+                savingsChartInstance.destroy();
+            }
+            const ctx = document.getElementById('savingsChart').getContext('2d');
+            savingsChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels.slice(1), // Start from month 1 for savings
+                    datasets: [{
+                        label: 'Cumulative Interest Saved (£)',
+                        data: cumulativeSavingsData,
+                        borderColor: 'var(--secondary-color)',
+                        backgroundColor: 'rgba(46, 204, 113, 0.1)',
+                        fill: true,
+                        tension: 0.3, // Makes the line curvy
+                        pointRadius: 3,
+                        pointBackgroundColor: 'var(--secondary-color)',
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: {
+                        duration: 1000,
+                        easing: 'easeInOutQuart'
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Cumulative Savings (£)',
+                                font: { size: 14, weight: '600' }
+                            },
+                            ticks: {
+                                callback: function(value) { return '£' + value.toLocaleString(); }
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Months into Fixed Period',
+                                font: { size: 14, weight: '600' }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed.y !== null) {
+                                        label += '£' + context.parsed.y.toFixed(2);
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        });
+
+        // Helper function for cumulative interest (used for graph's savings)
+        function calculateCumulativeInterest(initialPrincipal, annualRate, termYears, numMonths, monthlyOverpayment) {
+            let balance = initialPrincipal;
+            const monthlyRate = annualRate / 12;
+            const totalMonthsInLoan = termYears * 12;
+            
+            let baseMonthlyPayment;
+            if (monthlyRate > 0) {
+                baseMonthlyPayment = initialPrincipal * (monthlyRate * Math.pow(1 + monthlyRate, totalMonthsInLoan)) / (Math.pow(1 + monthlyRate, totalMonthsInLoan) - 1);
+            } else {
+                baseMonthlyPayment = initialPrincipal / totalMonthsInLoan;
+            }
+
+            let cumulativeInterest = 0;
+
+            for (let m = 0; m < numMonths; m++) {
+                if (balance <= 0) break;
+                const interestPayment = balance * monthlyRate;
+                cumulativeInterest += interestPayment;
+                let principalPayment = baseMonthlyPayment - interestPayment + monthlyOverpayment;
+                if (principalPayment > balance) principalPayment = balance; // Don't pay more principal than owed
+                balance -= principalPayment;
+                if (balance < 0.01) balance = 0;
+            }
+            return cumulativeInterest;
+        }
+
+        // Initial call to set the unit correctly
+        overpaymentTypeToggle.dispatchEvent(new Event('change'));
+        
+        // Trigger calculation with default values on load for a nice initial view
+        // calculateBtn.click(); // Optionally uncomment to pre-fill on load
+        // Or, ensure the results section is hidden until first calculation
+        resultsDiv.classList.remove('visible');
+
+    </script>
+</body>
+</html>
