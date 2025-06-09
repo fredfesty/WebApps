@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crypto Data Downloader</title>
+    
+    <!-- Google Fonts for a modern look -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* --- 1. General Styling & Theming --- */
+        :root {
+            --bg-color: #1a1a2e;
+            --container-bg: #16213e;
+            --primary-color: #0f3460;
+            --accent-color: #e94560;
+            --text-color: #e0e0e0;
+            --label-color: #a0a0c0;
+            --border-color: #53648e;
+            --success-color: #2ecc71;
+            --error-color: #e74c3c;
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        /* --- 2. Main Container --- */
+        .container {
+            background-color: var(--container-bg);
+            padding: 2rem 3rem;
+            border-radius: 20px;
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.4);
+            width: 100%;
+            max-width: 550px;
+            text-align: center;
+            border: 1px solid var(--border-color);
+        }
+
+        h1 {
+            color: var(--text-color);
+            margin-bottom: 0.5rem;
+            font-weight: 700;
+        }
+
+        .subtitle {
+            color: var(--label-color);
+            margin-bottom: 2.5rem;
+            font-size: 0.9rem;
+        }
+        
+        /* --- 3. Form Elements --- */
+        form {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            text-align: left;
+        }
+        
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .full-width {
+            grid-column: 1 / -1;
+        }
+
+        label {
+            font-weight: 500;
+            color: var(--label-color);
+            margin-bottom: 0.5rem;
+            font-size: 0.85rem;
+        }
+
+        input, select {
+            padding: 0.8rem 1rem;
+            background-color: var(--primary-color);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 1rem;
+            font-family: 'Poppins', sans-serif;
+            transition: border-color 0.3s, box-shadow 0.3s;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        
+        input::placeholder {
+            color: var(--label-color);
+            opacity: 0.7;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(233, 69, 96, 0.3);
+        }
+        
+        input[type="date"]::-webkit-calendar-picker-indicator {
+            filter: invert(1);
+            cursor: pointer;
+        }
+
+        button {
+            grid-column: 1 / -1;
+            padding: 1rem 1.5rem;
+            background: linear-gradient(90deg, #e94560, #a63345);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-top: 1rem;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+        }
+
+        button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(233, 69, 96, 0.3);
+        }
+
+        button:disabled {
+            background: #555;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        /* --- 4. Messaging & Loader --- */
+        #message-box {
+            margin-top: 1.5rem;
+            padding: 1rem;
+            border-radius: 8px;
+            font-weight: 500;
+            display: none; /* Hidden by default */
+            border: 1px solid;
+        }
+
+        #message-box.error {
+            background-color: rgba(231, 76, 60, 0.1);
+            color: var(--error-color);
+            border-color: var(--error-color);
+        }
+
+        .loader {
+            width: 18px;
+            height: 18px;
+            border: 2px solid #FFF;
+            border-bottom-color: transparent;
+            border-radius: 50%;
+            display: inline-block;
+            box-sizing: border-box;
+            animation: rotation 1s linear infinite;
+        }
+
+        @keyframes rotation {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* --- 5. Responsive Design --- */
+        @media (max-width: 600px) {
+            body {
+                padding: 10px;
+            }
+            .container {
+                padding: 1.5rem;
+            }
+            form {
+                grid-template-columns: 1fr;
+            }
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Crypto Data Downloader</h1>
+        <p class="subtitle">Fetch historical price data from Binance and save as CSV</p>
+
+        <form id="data-form">
+            <div class="form-group full-width">
+                <label for="symbol">Trading Pair</label>
+                <input type="text" id="symbol" name="symbol" placeholder="e.g., BTCUSDT" required>
+            </div>
+
+            <div class="form-group">
+                <label for="start-date">Start Date</label>
+                <input type="date" id="start-date" name="start_date" required>
+            </div>
+
+            <div class="form-group">
+                <label for="end-date">End Date</label>
+                <input type="date" id="end-date" name="end_date" required>
+            </div>
+
+            <div class="form-group full-width">
+                <label for="interval">Time Precision (Interval)</label>
+                <select id="interval" name="interval" required>
+                    <option value="1m">1 Minute</option>
+                    <option value="5m">5 Minutes</option>
+                    <option value="15m">15 Minutes</option>
+                    <option value="30m">30 Minutes</option>
+                    <option value="1h">1 Hour</option>
+                    <option value="4h">4 Hours</option>
+                    <option value="12h">12 Hours</option>
+                    <option value="1d" selected>1 Day</option>
+                    <option value="1w">1 Week</option>
+                    <option value="1M">1 Month</option>
+                </select>
+            </div>
+
+            <button type="submit" id="submit-button">
+                <span id="button-text">Download CSV</span>
+                <div id="loader" style="display: none;"></div>
+            </button>
+        </form>
+
+        <div id="message-box"></div>
+    </div>
+
+    <script>
+        // --- 1. Get DOM Elements ---
+        const form = document.getElementById('data-form');
+        const submitButton = document.getElementById('submit-button');
+        const buttonText = document.getElementById('button-text');
+        const loader = document.getElementById('loader');
+        const messageBox = document.getElementById('message-box');
+
+        // Set default dates
+        const today = new Date();
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const thirtyDaysAgo = new Date(today);
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+        document.getElementById('end-date').value = yesterday.toISOString().split('T')[0];
+        document.getElementById('start-date').value = thirtyDaysAgo.toISOString().split('T')[0];
+
+        // --- 2. Form Submission Handler ---
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault(); // Prevent default form submission
+            
+            // --- UI Feedback: Start Loading ---
+            setLoading(true);
+            hideMessage();
+
+            // --- 3. Get and Validate Form Data ---
+            const symbol = document.getElementById('symbol').value.toUpperCase();
+            const interval = document.getElementById('interval').value;
+            const startDate = document.getElementById('start-date').value;
+            const endDate = document.getElementById('end-date').value;
+
+            // Convert dates to Unix timestamps in milliseconds (required by Binance API)
+            const startTime = new Date(startDate).getTime();
+            const endTime = new Date(endDate).getTime() + (24 * 60 * 60 * 1000 - 1); // Include the full end day
+
+            if (startTime >= endTime) {
+                showError("Start date must be before the end date.");
+                setLoading(false);
+                return;
+            }
+
+            try {
+                // --- 4. Fetch Data from Binance API ---
+                // Binance API has a limit of 1000 data points per request.
+                // We'll fetch in chunks if the date range is too large.
+                let allKlines = [];
+                let currentStartTime = startTime;
+                
+                while (currentStartTime < endTime) {
+                    const apiUrl = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&startTime=${currentStartTime}&endTime=${endTime}&limit=1000`;
+                    
+                    const response = await fetch(apiUrl);
+                    
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(`API Error: ${errorData.msg} (Code: ${errorData.code})`);
+                    }
+                    
+                    const klines = await response.json();
+                    
+                    if (klines.length === 0) {
+                        break; // No more data to fetch
+                    }
+                    
+                    allKlines.push(...klines);
+                    currentStartTime = klines[klines.length - 1][0] + 1; // Next start time is after the last open time
+                }
+
+
+                if (allKlines.length === 0) {
+                    throw new Error("No data found for the specified symbol and date range.");
+                }
+
+                // --- 5. Process Data and Convert to CSV ---
+                const csvContent = convertToCSV(allKlines);
+
+                // --- 6. Trigger CSV File Download ---
+                const filename = `${symbol}_${interval}_${startDate}_to_${endDate}.csv`;
+                downloadCSV(csvContent, filename);
+
+            } catch (error) {
+                showError(error.message);
+            } finally {
+                // --- UI Feedback: Stop Loading ---
+                setLoading(false);
+            }
+        });
+
+        // --- Helper Functions ---
+
+        function setLoading(isLoading) {
+            if (isLoading) {
+                submitButton.disabled = true;
+                buttonText.style.display = 'none';
+                loader.style.display = 'block';
+                loader.className = 'loader'; // Add class to start animation
+            } else {
+                submitButton.disabled = false;
+                buttonText.style.display = 'inline';
+                loader.style.display = 'none';
+            }
+        }
+
+        function showError(message) {
+            messageBox.textContent = message;
+            messageBox.className = 'error';
+            messageBox.style.display = 'block';
+        }
+
+        function hideMessage() {
+            messageBox.style.display = 'none';
+        }
+
+        function convertToCSV(data) {
+            // Define CSV headers
+            const headers = ['Open Time', 'Open', 'High', 'Low', 'Close', 'Volume', 'Close Time', 'Quote Asset Volume', 'Number of Trades', 'Taker Buy Base Volume', 'Taker Buy Quote Volume', 'Ignore'];
+            
+            // Map data to CSV rows
+            const rows = data.map(kline => {
+                // Convert timestamp to a human-readable ISO string
+                const openTime = new Date(kline[0]).toISOString();
+                const closeTime = new Date(kline[6]).toISOString();
+                // Return an array with formatted date and original values
+                return [openTime, ...kline.slice(1, 6), closeTime, ...kline.slice(7)];
+            });
+
+            // Combine headers and rows
+            const csvArray = [headers.join(','), ...rows.map(row => row.join(','))];
+            
+            // Return a single string with newline characters
+            return csvArray.join('\n');
+        }
+
+        function downloadCSV(csvContent, filename) {
+            // Create a 'blob' of the data
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            
+            // Create a temporary link element
+            const link = document.createElement("a");
+            
+            if (link.download !== undefined) { // Check if the browser supports the download attribute
+                const url = URL.createObjectURL(blob);
+                link.setAttribute("href", url);
+                link.setAttribute("download", filename);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+        }
+    </script>
+
+</body>
+</html>
