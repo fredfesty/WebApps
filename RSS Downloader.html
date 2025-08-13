@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RSS Feed Extractor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .loader {
+            border-top-color: #3498db;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div class="container mx-auto p-4 sm:p-6 lg:p-8">
+        <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-lg p-6 sm:p-8">
+            
+            <header class="mb-6 text-center">
+                <h1 class="text-3xl sm:text-4xl font-bold text-gray-900">RSS Feed Extractor</h1>
+                <p class="mt-2 text-gray-600">Enter RSS feed URLs below, fetch the articles, and download them as a CSV file.</p>
+            </header>
+
+            <main>
+                <!-- RSS Feed Input Section -->
+                <div class="mb-6">
+                    <label for="rss-urls" class="block text-lg font-medium text-gray-700 mb-2">RSS Feed URLs (one per line):</label>
+                    <textarea id="rss-urls" rows="10" class="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow duration-200">
+http://feeds.bbci.co.uk/news/world/rss.xml
+http://rss.cnn.com/rss/cnn_topstories.rss
+https://feeds.skynews.com/feeds/rss/home.xml
+https://www.reuters.com/tools/rss
+https://arstechnica.com/rss/
+https://www.technologyreview.com/feed/
+https://www.quantamagazine.org/rss/
+http://feeds.bbci.co.uk/news/technology/rss.xml
+https://techcrunch.com/feed/
+https://feeds.wired.com/wired/most-recent
+https://news.ycombinator.com/rss
+https://phys.org/rss-feed/quantum-physics/
+https://phys.org/rss-feed/nanotech-news/
+https://www.nature.com/subjects/quantum-physics.rss
+https://www.sciencedaily.com/rss/top/technology.xml
+                    </textarea>
+                </div>
+
+                <!-- Action Buttons & Status -->
+                <div class="flex flex-col sm:flex-row items-center justify-center gap-4 mb-6">
+                    <button id="fetch-button" class="w-full sm:w-auto bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-200 ease-in-out transform hover:scale-105 flex items-center justify-center">
+                        <svg id="fetch-icon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
+                        </svg>
+                        <div id="loader" class="loader h-5 w-5 mr-2 border-4 border-gray-200 rounded-full hidden"></div>
+                        <span id="fetch-button-text">Fetch & Parse Feeds</span>
+                    </button>
+                    <button id="download-csv-button" class="w-full sm:w-auto bg-green-600 text-white font-semibold py-3 px-6 rounded-lg shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-all duration-200 ease-in-out transform hover:scale-105 hidden">
+                        Download CSV
+                    </button>
+                </div>
+                <div id="status" class="text-center text-gray-600 min-h-[1.5rem]"></div>
+
+                <!-- Results Table -->
+                <div class="overflow-x-auto mt-4">
+                    <table class="min-w-full bg-white rounded-lg shadow">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Publication Date</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Feed Source</th>
+                            </tr>
+                        </thead>
+                        <tbody id="results-body" class="divide-y divide-gray-200">
+                            <!-- Results will be injected here by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script>
+        // Store the fetched articles in a global array
+        let allArticles = [];
+
+        const fetchButton = document.getElementById('fetch-button');
+        const downloadCsvButton = document.getElementById('download-csv-button');
+        const statusDiv = document.getElementById('status');
+        const resultsBody = document.getElementById('results-body');
+        const urlsTextarea = document.getElementById('rss-urls');
+
+        // --- Event Listeners ---
+        fetchButton.addEventListener('click', handleFetchFeeds);
+        downloadCsvButton.addEventListener('click', handleDownloadCsv);
+
+        /**
+         * Main function to handle the fetching and parsing of RSS feeds.
+         */
+        async function handleFetchFeeds() {
+            // Reset UI state
+            setLoadingState(true);
+            allArticles = [];
+            resultsBody.innerHTML = '';
+            statusDiv.textContent = 'Starting...';
+
+            // Get URLs from the textarea, filter out empty lines
+            const urls = urlsTextarea.value.split('\n').map(url => url.trim()).filter(url => url);
+            
+            if (urls.length === 0) {
+                statusDiv.textContent = 'Error: Please provide at least one RSS feed URL.';
+                setLoadingState(false);
+                return;
+            }
+
+            // Process each URL sequentially
+            for (let i = 0; i < urls.length; i++) {
+                const url = urls[i];
+                statusDiv.textContent = `Fetching feed ${i + 1} of ${urls.length}: ${url}`;
+                try {
+                    // We use the rss2json API as a proxy to bypass CORS issues and parse XML.
+                    const response = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}`);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    const data = await response.json();
+                    
+                    if (data.status === 'ok') {
+                        processFeedData(data);
+                    } else {
+                        throw new Error(`API error for ${url}: ${data.message}`);
+                    }
+                } catch (error) {
+                    console.error(`Failed to fetch or parse ${url}:`, error);
+                    statusDiv.textContent = `Error fetching ${url}. Check console for details.`;
+                    // Continue to the next feed even if one fails
+                }
+            }
+
+            statusDiv.textContent = `Processing complete. Found ${allArticles.length} articles.`;
+            setLoadingState(false);
+            if (allArticles.length > 0) {
+                downloadCsvButton.classList.remove('hidden');
+            }
+        }
+
+        /**
+         * Processes the JSON data from a single feed and updates the UI.
+         * @param {object} data - The parsed JSON object from the rss2json API.
+         */
+        function processFeedData(data) {
+            const feedTitle = data.feed.title;
+            data.items.forEach(item => {
+                const article = {
+                    title: item.title || '',
+                    link: item.link || '',
+                    pubDate: item.pubDate || '',
+                    description: item.description || '',
+                    feedSource: feedTitle || ''
+                };
+                allArticles.push(article);
+                addArticleToTable(article);
+            });
+        }
+
+        /**
+         * Appends a single article as a new row in the results table.
+         * @param {object} article - The article object to display.
+         */
+        function addArticleToTable(article) {
+            const row = document.createElement('tr');
+            row.className = 'hover:bg-gray-50';
+            
+            const titleCell = document.createElement('td');
+            titleCell.className = 'px-6 py-4 whitespace-nowrap';
+            const titleLink = document.createElement('a');
+            titleLink.href = article.link;
+            titleLink.textContent = article.title;
+            titleLink.target = '_blank';
+            titleLink.rel = 'noopener noreferrer';
+            titleLink.className = 'text-sm font-medium text-blue-600 hover:text-blue-800';
+            titleCell.appendChild(titleLink);
+
+            const dateCell = document.createElement('td');
+            dateCell.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-500';
+            dateCell.textContent = new Date(article.pubDate).toLocaleString();
+
+            const feedCell = document.createElement('td');
+            feedCell.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-500';
+            feedCell.textContent = article.feedSource;
+
+            row.appendChild(titleCell);
+            row.appendChild(dateCell);
+            row.appendChild(feedCell);
+            resultsBody.appendChild(row);
+        }
+
+        /**
+         * Handles the creation and download of the CSV file.
+         */
+        function handleDownloadCsv() {
+            if (allArticles.length === 0) {
+                alert('No articles to download.');
+                return;
+            }
+
+            const headers = ['Title', 'Link', 'Publication Date', 'Description', 'Feed Source'];
+            const csvRows = [headers.join(',')];
+
+            allArticles.forEach(article => {
+                const values = [
+                    sanitizeCsvField(article.title),
+                    sanitizeCsvField(article.link),
+                    sanitizeCsvField(article.pubDate),
+                    sanitizeCsvField(article.description),
+                    sanitizeCsvField(article.feedSource)
+                ];
+                csvRows.push(values.join(','));
+            });
+
+            // *** FIX: Prepend the UTF-8 Byte Order Mark (BOM) to the CSV string. ***
+            const bom = '\uFEFF';
+            const csvString = bom + csvRows.join('\n');
+            const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+            
+            const link = document.createElement('a');
+            if (link.download !== undefined) {
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', 'rss_export.csv');
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+        }
+
+        /**
+         * Sanitizes a string for use in a CSV file by enclosing it in double quotes
+         * and escaping any existing double quotes.
+         * @param {string} field - The string to sanitize.
+         * @returns {string} The sanitized string.
+         */
+        function sanitizeCsvField(field) {
+            if (field === null || field === undefined) {
+                return '""';
+            }
+            // Remove HTML tags from description and normalize line breaks
+            const strippedField = field.toString().replace(/<[^>]*>/g, ' ').replace(/(\r\n|\n|\r)/gm," ").trim();
+            // Escape double quotes and wrap in double quotes
+            const escapedField = strippedField.replace(/"/g, '""');
+            return `"${escapedField}"`;
+        }
+
+        /**
+         * Toggles the UI into a loading state.
+         * @param {boolean} isLoading - True to show loading state, false to hide.
+         */
+        function setLoadingState(isLoading) {
+            const fetchIcon = document.getElementById('fetch-icon');
+            const loader = document.getElementById('loader');
+            const fetchButtonText = document.getElementById('fetch-button-text');
+
+            if (isLoading) {
+                fetchButton.disabled = true;
+                fetchButton.classList.add('cursor-not-allowed', 'opacity-75');
+                fetchIcon.classList.add('hidden');
+                loader.classList.remove('hidden');
+                fetchButtonText.textContent = 'Fetching...';
+                downloadCsvButton.classList.add('hidden');
+            } else {
+                fetchButton.disabled = false;
+                fetchButton.classList.remove('cursor-not-allowed', 'opacity-75');
+                fetchIcon.classList.remove('hidden');
+                loader.classList.add('hidden');
+                fetchButtonText.textContent = 'Fetch & Parse Feeds';
+            }
+        }
+
+    </script>
+
+</body>
+</html>
