@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>European Capitals Time & Info Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .clock-card {
+            transition: all 0.2s ease-in-out;
+            cursor: pointer;
+        }
+        .clock-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        .modal-overlay {
+            background-color: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+        }
+        [v-cloak] { display: none; }
+        
+        /* Custom scrollbar for better look */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { 
+            background: #cbd5e1; 
+            border-radius: 10px;
+        }
+        .dark ::-webkit-scrollbar-thumb { background: #475569; }
+    </style>
+</head>
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300 min-h-screen">
+
+    <div id="app" class="max-w-6xl mx-auto px-4 py-8">
+        <!-- Header Section -->
+        <header class="mb-10 text-center">
+            <h1 class="text-4xl font-extrabold mb-2 tracking-tight">European City Hub</h1>
+            <p class="text-slate-500 dark:text-slate-400 max-w-2xl mx-auto">
+                Real-time local times and city insights. Click any city to view details.
+            </p>
+        </header>
+
+        <!-- Controls -->
+        <div class="flex flex-col md:flex-row gap-4 mb-8 items-center justify-between">
+            <div class="relative w-full md:w-96">
+                <input 
+                    type="text" 
+                    id="search" 
+                    placeholder="Search city or country..." 
+                    class="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                >
+                <span class="absolute left-3 top-2.5 text-slate-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                </span>
+            </div>
+            
+            <button 
+                id="themeToggle"
+                class="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors font-medium text-sm flex items-center gap-2"
+            >
+                <span class="dark:hidden">🌙 Dark Mode</span>
+                <span class="hidden dark:inline">☀️ Light Mode</span>
+            </button>
+        </div>
+
+        <!-- Grid -->
+        <div id="clockGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <!-- Cards will be injected here -->
+        </div>
+    </div>
+
+    <!-- Modal Structure -->
+    <div id="cityModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="modal-overlay absolute inset-0" onclick="closeModal()"></div>
+        <div class="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl max-w-lg w-full z-10 overflow-hidden relative transform transition-all">
+            <button onclick="closeModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+            
+            <div class="p-8">
+                <div id="modalHeader">
+                    <h3 id="modalCountry" class="text-sm font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-widest mb-1">Country</h3>
+                    <h2 id="modalCity" class="text-3xl font-bold mb-4">City Name</h2>
+                </div>
+
+                <div id="modalLoading" class="flex flex-col items-center justify-center py-12">
+                    <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mb-4"></div>
+                    <p class="text-slate-500 text-sm">Fetching latest city data...</p>
+                </div>
+
+                <div id="modalContent" class="hidden space-y-6">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl">
+                            <p class="text-xs text-slate-400 uppercase font-bold mb-1">Current Time</p>
+                            <p id="modalTime" class="text-xl font-mono font-bold tracking-tight">--:--</p>
+                        </div>
+                        <div class="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl">
+                            <p class="text-xs text-slate-400 uppercase font-bold mb-1">Weather</p>
+                            <p id="modalWeather" class="text-lg font-bold">--</p>
+                        </div>
+                    </div>
+
+                    <div>
+                        <p class="text-xs text-slate-400 uppercase font-bold mb-2">About</p>
+                        <p id="modalDescription" class="text-slate-600 dark:text-slate-300 leading-relaxed">
+                            Loading information...
+                        </p>
+                    </div>
+
+                    <div id="modalStats" class="border-t border-slate-100 dark:border-slate-700 pt-6">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-slate-500">Population</span>
+                            <span id="modalPopulation" class="font-semibold">--</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const apiKey = ""; // Provided at runtime
+        const capitals = [
+            { city: "Amsterdam", country: "Netherlands", zone: "Europe/Amsterdam", pop: "821,000" },
+            { city: "Andorra la Vella", country: "Andorra", zone: "Europe/Andorra", pop: "22,000" },
+            { city: "Athens", country: "Greece", zone: "Europe/Athens", pop: "664,000" },
+            { city: "Belgrade", country: "Serbia", zone: "Europe/Belgrade", pop: "1,166,000" },
+            { city: "Berlin", country: "Germany", zone: "Europe/Berlin", pop: "3,769,000" },
+            { city: "Bern", country: "Switzerland", zone: "Europe/Zurich", pop: "133,000" },
+            { city: "Bratislava", country: "Slovakia", zone: "Europe/Bratislava", pop: "424,000" },
+            { city: "Brussels", country: "Belgium", zone: "Europe/Brussels", pop: "1,200,000" },
+            { city: "Bucharest", country: "Romania", zone: "Europe/Bucharest", pop: "1,883,000" },
+            { city: "Budapest", country: "Hungary", zone: "Europe/Budapest", pop: "1,752,000" },
+            { city: "Chisinau", country: "Moldova", zone: "Europe/Chisinau", pop: "532,000" },
+            { city: "Copenhagen", country: "Denmark", zone: "Europe/Copenhagen", pop: "602,000" },
+            { city: "Dublin", country: "Ireland", zone: "Europe/Dublin", pop: "544,000" },
+            { city: "Helsinki", country: "Finland", zone: "Europe/Helsinki", pop: "631,000" },
+            { city: "Kyiv", country: "Ukraine", zone: "Europe/Kyiv", pop: "2,884,000" },
+            { city: "Lisbon", country: "Portugal", zone: "Europe/Lisbon", pop: "504,000" },
+            { city: "Ljubljana", country: "Slovenia", zone: "Europe/Ljubljana", pop: "279,000" },
+            { city: "London", country: "United Kingdom", zone: "Europe/London", pop: "8,982,000" },
+            { city: "Luxembourg", country: "Luxembourg", zone: "Europe/Luxembourg", pop: "116,000" },
+            { city: "Madrid", country: "Spain", zone: "Europe/Madrid", pop: "3,223,000" },
+            { city: "Minsk", country: "Belarus", zone: "Europe/Minsk", pop: "2,020,000" },
+            { city: "Monaco", country: "Monaco", zone: "Europe/Monaco", pop: "38,000" },
+            { city: "Moscow", country: "Russia", zone: "Europe/Moscow", pop: "12,506,000" },
+            { city: "Nicosia", country: "Cyprus", zone: "Europe/Nicosia", pop: "200,000" },
+            { city: "Oslo", country: "Norway", zone: "Europe/Oslo", pop: "634,000" },
+            { city: "Paris", country: "France", zone: "Europe/Paris", pop: "2,161,000" },
+            { city: "Podgorica", country: "Montenegro", zone: "Europe/Podgorica", pop: "150,000" },
+            { city: "Prague", country: "Czech Republic", zone: "Europe/Prague", pop: "1,309,000" },
+            { city: "Pristina", country: "Kosovo", zone: "Europe/Belgrade", pop: "200,000" },
+            { city: "Reykjavik", country: "Iceland", zone: "Atlantic/Reykjavik", pop: "131,000" },
+            { city: "Riga", country: "Latvia", zone: "Europe/Riga", pop: "627,000" },
+            { city: "Rome", country: "Italy", zone: "Europe/Rome", pop: "2,873,000" },
+            { city: "San Marino", country: "San Marino", zone: "Europe/San_Marino", pop: "4,000" },
+            { city: "Sarajevo", country: "Bosnia and Herzegovina", zone: "Europe/Sarajevo", pop: "275,000" },
+            { city: "Skopje", country: "North Macedonia", zone: "Europe/Skopje", pop: "544,000" },
+            { city: "Sofia", country: "Bulgaria", zone: "Europe/Sofia", pop: "1,242,000" },
+            { city: "Stockholm", country: "Sweden", zone: "Europe/Stockholm", pop: "975,000" },
+            { city: "Tallinn", country: "Estonia", zone: "Europe/Tallinn", pop: "426,000" },
+            { city: "Tirana", country: "Albania", zone: "Europe/Tirana", pop: "418,000" },
+            { city: "Vaduz", country: "Liechtenstein", zone: "Europe/Vaduz", pop: "5,000" },
+            { city: "Valletta", country: "Malta", zone: "Europe/Malta", pop: "6,000" },
+            { city: "Vatican City", country: "Vatican City", zone: "Europe/Vatican", pop: "800" },
+            { city: "Vienna", country: "Austria", zone: "Europe/Vienna", pop: "1,897,000" },
+            { city: "Vilnius", country: "Lithuania", zone: "Europe/Vilnius", pop: "544,000" },
+            { city: "Warsaw", country: "Poland", zone: "Europe/Warsaw", pop: "1,765,000" },
+            { city: "Zagreb", country: "Croatia", zone: "Europe/Zagreb", pop: "790,000" }
+        ];
+
+        const grid = document.getElementById('clockGrid');
+        const searchInput = document.getElementById('search');
+        const themeToggle = document.getElementById('themeToggle');
+        const modal = document.getElementById('cityModal');
+
+        // Dark Mode Logic
+        if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.documentElement.classList.add('dark');
+        }
+
+        themeToggle.addEventListener('click', () => {
+            document.documentElement.classList.toggle('dark');
+        });
+
+        // Create Clock Elements
+        function initClocks() {
+            grid.innerHTML = '';
+            capitals.forEach((cap, index) => {
+                const card = document.createElement('div');
+                card.className = 'clock-card bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col justify-between';
+                card.dataset.city = cap.city.toLowerCase();
+                card.dataset.country = cap.country.toLowerCase();
+                card.onclick = () => openModal(index);
+                
+                card.innerHTML = `
+                    <div>
+                        <div class="flex justify-between items-start">
+                             <h3 class="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-widest">${cap.country}</h3>
+                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                             </svg>
+                        </div>
+                        <h2 class="text-xl font-bold">${cap.city}</h2>
+                    </div>
+                    <div class="mt-4">
+                        <div id="time-${index}" class="text-3xl font-mono font-medium tracking-tighter tabular-nums">--:--:--</div>
+                        <div id="date-${index}" class="text-xs text-slate-400 mt-1 uppercase tracking-tighter">---</div>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        async function fetchCityInfo(cityName) {
+            const systemPrompt = "You are a helpful travel guide. Provide a brief (2-3 sentence) interesting fact or summary about the given city and its current general climate/weather description for this time of year.";
+            const userQuery = `Tell me about ${cityName}. Format as JSON with 'description' and 'weather' keys.`;
+            
+            try {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: userQuery }] }],
+                        systemInstruction: { parts: [{ text: systemPrompt }] },
+                        generationConfig: { responseMimeType: "application/json" }
+                    })
+                });
+                
+                if (!response.ok) throw new Error('API Error');
+                const result = await response.json();
+                return JSON.parse(result.candidates[0].content.parts[0].text);
+            } catch (error) {
+                console.error("Fetch failed", error);
+                return { description: "Information temporarily unavailable.", weather: "Unknown" };
+            }
+        }
+
+        async function openModal(index) {
+            const cap = capitals[index];
+            const modalCity = document.getElementById('modalCity');
+            const modalCountry = document.getElementById('modalCountry');
+            const modalTime = document.getElementById('modalTime');
+            const modalPop = document.getElementById('modalPopulation');
+            const modalWeather = document.getElementById('modalWeather');
+            const modalDesc = document.getElementById('modalDescription');
+            const loading = document.getElementById('modalLoading');
+            const content = document.getElementById('modalContent');
+
+            // Reset and Show
+            modalCity.textContent = cap.city;
+            modalCountry.textContent = cap.country;
+            modalPop.textContent = cap.pop;
+            modalTime.textContent = document.getElementById(`time-${index}`).textContent;
+            
+            loading.classList.remove('hidden');
+            content.classList.add('hidden');
+            modal.classList.remove('hidden');
+
+            // Fetch AI content
+            const info = await fetchCityInfo(cap.city);
+            
+            modalWeather.textContent = info.weather;
+            modalDesc.textContent = info.description;
+            
+            loading.classList.add('hidden');
+            content.classList.remove('hidden');
+        }
+
+        function closeModal() {
+            modal.classList.add('hidden');
+        }
+
+        function updateTime() {
+            capitals.forEach((cap, index) => {
+                const timeEl = document.getElementById(`time-${index}`);
+                const dateEl = document.getElementById(`date-${index}`);
+                
+                try {
+                    const now = new Date();
+                    const timeStr = new Intl.DateTimeFormat('en-GB', {
+                        timeZone: cap.zone,
+                        hour: '2-digit', minute: '2-digit', second: '2-digit',
+                        hour12: false
+                    }).format(now);
+
+                    const dateStr = new Intl.DateTimeFormat('en-GB', {
+                        timeZone: cap.zone,
+                        weekday: 'short', day: 'numeric', month: 'short'
+                    }).format(now);
+
+                    timeEl.textContent = timeStr;
+                    dateEl.textContent = dateStr;
+                } catch (e) {
+                    timeEl.textContent = "Error";
+                }
+            });
+        }
+
+        // Search Filter
+        searchInput.addEventListener('input', (e) => {
+            const term = e.target.value.toLowerCase();
+            const cards = document.querySelectorAll('.clock-card');
+            cards.forEach(card => {
+                const isMatch = card.dataset.city.includes(term) || card.dataset.country.includes(term);
+                card.style.display = isMatch ? 'flex' : 'none';
+            });
+        });
+
+        // Initialize
+        initClocks();
+        setInterval(updateTime, 1000);
+        updateTime();
+    </script>
+</body>
+</html>
