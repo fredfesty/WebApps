@@ -102,6 +102,11 @@ input:focus-visible, textarea:focus-visible, button:focus-visible, select:focus-
 .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
 .row > * { flex: 0 0 auto; }
 .grow { flex: 1 1 260px !important; }
+.saved-list { list-style: none; padding: 0; margin: 6px 0 16px; }
+.saved-list li { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 8px 0; }
+.saved-list .saved-name { font-weight: 700; overflow-wrap: anywhere; }
+.saved-list .row { margin-top: 6px; gap: 8px; }
+.saved-list button { padding: 4px 10px; }
 .check { display: flex; gap: 10px; align-items: flex-start; font-weight: 400; margin: 10px 0; }
 .check input { width: 20px; height: 20px; margin-top: 4px; flex: 0 0 auto; }
 button {
@@ -294,6 +299,28 @@ details.card > summary .meta { color: var(--muted); font-size: 0.95rem; }
     <div id="start-msg" class="msg" role="status"></div>
   </section>
 
+  <!-- 5. Saved councils and runs -->
+  <section class="panel setup library no-print" aria-labelledby="h-saved">
+    <h2 id="h-saved"><span class="step-no">5</span>Saved councils and runs</h2>
+    <p class="hint">Saved in this browser only. Download a file to keep a copy or to use it on another computer. Saved items and files never contain your key.</p>
+    <h3>Save the current council</h3>
+    <p class="hint">Saves the members with their settings, the type of council, the rounds and the other settings. Not the question.</p>
+    <label for="council-name">Name</label>
+    <input type="text" id="council-name" maxlength="120">
+    <div class="row" style="margin-top:10px">
+      <button id="btn-save-council" class="primary">Save council</button>
+      <button id="btn-dl-council">Download council (.json)</button>
+      <button id="btn-import">Open a saved file (.json)</button>
+      <input type="file" id="import-file" accept=".json,application/json" class="hidden">
+    </div>
+    <div id="saved-msg" class="msg" role="status"></div>
+    <h3 style="margin-top:16px">Saved councils</h3>
+    <ul id="saved-councils" class="saved-list"></ul>
+    <h3>Saved runs</h3>
+    <p class="hint">Every finished run is saved here, named by its chair. Practice runs are only saved if you click "Save this run".</p>
+    <ul id="saved-runs" class="saved-list"></ul>
+  </section>
+
   <!-- Run -->
   <section id="run-area" class="hidden" aria-labelledby="h-run">
     <h2 id="h-run" class="no-print">The council at work</h2>
@@ -307,7 +334,7 @@ details.card > summary .meta { color: var(--muted); font-size: 0.95rem; }
     </ol>
 
     <section id="results" class="panel hidden">
-      <h2>The council's answer</h2>
+      <h2 id="final-title">The council's answer</h2>
       <p id="final-meta" class="hint"></p>
       <div id="final-answer"><div class="md"></div></div>
       <h3 style="margin-top:24px">The council</h3>
@@ -317,6 +344,7 @@ details.card > summary .meta { color: var(--muted); font-size: 0.95rem; }
         <button id="btn-print">Print or save as PDF</button>
         <button id="btn-dl-log">Download call log (.csv)</button>
         <button id="btn-dl-run">Download everything (.json)</button>
+        <button id="btn-save-run">Save this run</button>
       </div>
     </section>
 
@@ -806,6 +834,7 @@ function renderMembers() {
   }
   box.appendChild(wrap);
   renderEstimate(members);
+  updateCouncilName();
   saveSettings();
 }
 
@@ -855,7 +884,8 @@ function renderEstimate(members) {
   total += type.summaries
     ? price(priciest, 300 + M * 2500, 3000)                                // chair reads summaries
     : price(priciest, 300 + M * A + M * (M - 1) * 80, 3000);              // chair reads answers
-  const calls = M * (1 + R + 1 + (type.summaries ? 1 : 0)) + (type.delphi ? R : 0) + 1;
+  total += price(priciest, 2000, 30);                                    // chair names the run
+  const calls = M * (1 + R + 1 + (type.summaries ? 1 : 0)) + (type.delphi ? R : 0) + 2;
   el.className = "msg";
   el.innerHTML = `<strong>${calls} model calls.</strong> Rough cost: about $${total.toFixed(2)}. ` +
     `<span class="hint">This assumes answers of about 1,500 tokens each${$("web-research").checked ? ", and about 2 cents plus 5,000 tokens of search results per web search" : ""}. Models that "think" before answering can cost 2 to 3 times more.</span>`;
@@ -1009,6 +1039,8 @@ async function fakeCompletion(member, prompt, signal, opts = {}) {
     const ids = [...prompt.matchAll(/^Model ID: (.+)$/gm)].map((m) => m[1].trim()).sort(() => Math.random() - 0.5);
     const evals = ids.map((id, i) => ({ model_id: id, score: 92 - i * 7 - Math.floor(Math.random() * 4), rank: i + 1, critique: `Practice critique of ${id}: clear structure, could cite more sources.` }));
     content = "Here is my evaluation:\n```json\n" + JSON.stringify({ evaluations: evals }, null, 2) + "\n```";
+  } else if (prompt.startsWith("You chaired a council")) {
+    content = "Practice Run: The Council's Verdict";
   } else if (prompt.startsWith("You are the neutral facilitator")) {
     content = `## Where the panel agrees\n\nPractice summary by ${member.name}. Most answers agree on the main point.\n\n## Where the panel differs\n\nTwo views on the size of the effect.\n\n## Open questions\n\nHow good is the evidence?`;
   } else if (prompt.includes("You are a member of a Delphi panel")) {
@@ -1278,14 +1310,17 @@ async function startCouncil() {
   state.run = {
     startedAt: new Date().toISOString(), practice, key, question: questionRaw, query, rounds, timeoutSec,
     webResearch: $("web-research").checked, type: typeKey, roles: {}, facilitations: [],
+    addInstruction: $("add-instruction").checked, name: null, saved: false,
     members, openings: [], debate: [], finals: [], evaluations: [], summary: [], reports: [], chair: null, finalAnswer: null, calls: [],
   };
   const run = state.run;
+  run.council = councilSnapshot(members, { type: typeKey, rounds, timeout: timeoutSec, webResearch: run.webResearch, addInstruction: run.addInstruction });
   const t0 = performance.now();
 
   setRunning(true);
   $("run-area").classList.remove("hidden");
   $("results").classList.add("hidden");
+  $("progress").classList.remove("hidden");
   $("phases").innerHTML = "";
   $("log").textContent = "";
   document.querySelectorAll("#progress li").forEach((li) => li.classList.remove("active", "done", "failed", "skipped"));
@@ -1492,10 +1527,12 @@ async function startCouncil() {
     const r = await callModel(chair, finalPrompt, "Phase 5: Master Report", Math.max(timeoutSec, 600));
     card.ok(r.content, r);
     run.finalAnswer = r.content;
+    run.name = await chairTitle(chair, questionRaw, r.content, timeoutSec);
     run.durationSeconds = (performance.now() - t0) / 1000;
     setStep(step, "done");
     showResults();
     log(`Finished in ${secs(run.durationSeconds)}. Total cost ${money(totalCost())}.`);
+    if (!run.practice) await saveRun();
   } catch (e) {
     setStep(step, "failed");
     run.durationSeconds = (performance.now() - t0) / 1000;
@@ -1536,6 +1573,9 @@ function memberStats() {
 function showResults() {
   const run = state.run;
   $("results").classList.remove("hidden");
+  $("final-title").textContent = run.name || "The council's answer";
+  $("btn-save-run").textContent = run.saved ? "Saved" : "Save this run";
+  $("btn-save-run").disabled = !!run.saved;
   $("final-meta").textContent = `Question: ${run.question} · Chair: ${run.chair.name} · ${COUNCIL_TYPES[run.type].label}, ${run.members.length} members, ${run.rounds} round(s)${run.practice ? " · PRACTICE RUN, made-up answers" : ""}`;
   $("final-answer").querySelector(".md").innerHTML = renderMarkdown(run.finalAnswer);
   const sources = allSources();
@@ -1559,9 +1599,266 @@ function setRunning(on) {
   state.running = on;
   $("btn-start").disabled = on;
   $("btn-stop").classList.toggle("hidden", !on);
-  document.querySelectorAll(".setup input, .setup textarea, .setup .tabs button, #btn-save-key, #btn-clear-key")
+  document.querySelectorAll(".setup input, .setup textarea, .setup .tabs button, .library button, #btn-save-key, #btn-clear-key")
     .forEach((el) => { el.disabled = on; });
   if (!on) syncTypeControls(); // keep the rounds box off for peer review
+}
+
+// ---------- Saved councils and runs ----------
+// Kept in IndexedDB, the browser's own database, which has room for long runs.
+const DB_NAME = "council-of-ai";
+function openDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      for (const name of ["councils", "runs"]) {
+        if (!req.result.objectStoreNames.contains(name)) req.result.createObjectStore(name, { keyPath: "id" });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function dbDo(storeName, mode, fn) {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const req = fn(db.transaction(storeName, mode).objectStore(storeName));
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+const dbAll = (name) => dbDo(name, "readonly", (st) => st.getAll());
+const dbGet = (name, id) => dbDo(name, "readonly", (st) => st.get(id));
+const dbPut = (name, value) => dbDo(name, "readwrite", (st) => st.put(value));
+const dbDelete = (name, id) => dbDo(name, "readwrite", (st) => st.delete(id));
+const newId = (prefix) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+
+function savedMsg(text, kind = "") {
+  const el = $("saved-msg");
+  el.className = `msg ${kind}`;
+  el.textContent = text;
+}
+function fileSlug(name, fallback) {
+  const slug = String(name || "").replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "-").slice(0, 60);
+  return slug || fallback;
+}
+// "Anthropic: Claude Opus 5 (2)" -> "Claude Opus 5"
+function shortModelName(name) {
+  return String(name).replace(/^[^:]+:\s*/, "").replace(/\s*\(\d+\)$/, "");
+}
+
+// A council: its seats with their settings, plus the type and the other settings.
+function councilSnapshot(members, opts) {
+  return {
+    type: opts.type, rounds: opts.rounds, timeout: opts.timeout,
+    webResearch: opts.webResearch, addInstruction: opts.addInstruction,
+    seats: members.map((m) => ({
+      modelId: m.id, name: shortModelName(m.name),
+      temperature: m.temperature ?? null, gender: m.gender ?? null, age: m.age ?? null,
+    })),
+  };
+}
+function currentCouncil() {
+  const type = councilType();
+  return councilSnapshot(currentMembers(), {
+    type,
+    rounds: COUNCIL_TYPES[type].rounds ? Math.max(0, Math.min(6, parseInt($("rounds").value, 10) || 0)) : 0,
+    timeout: Math.max(5, parseInt($("timeout").value, 10) || 300),
+    webResearch: $("web-research").checked, addInstruction: $("add-instruction").checked,
+  });
+}
+// A name made from the data, such as "Delphi panel: 2× GLM 5.3, Kimi K3.1 Pro, 2 rounds, web, personas"
+function councilAutoName(c) {
+  if (!c.seats.length) return "";
+  const counts = new Map();
+  for (const seat of c.seats) counts.set(seat.name, (counts.get(seat.name) || 0) + 1);
+  const parts = [...counts].map(([n, k]) => (k > 1 ? `${k}× ${n}` : n));
+  const who = parts.length <= 3 ? parts.join(", ") : `${parts.slice(0, 2).join(", ")} and ${parts.length - 2} more`;
+  const t = COUNCIL_TYPES[c.type] || COUNCIL_TYPES.debate;
+  const extras = [
+    t.rounds ? `${c.rounds} round${c.rounds === 1 ? "" : "s"}` : "",
+    c.webResearch ? "web" : "",
+    c.seats.some((x) => x.gender || x.age) ? "personas" : "",
+  ].filter(Boolean);
+  return `${t.label}: ${who}${extras.length ? ", " + extras.join(", ") : ""}`;
+}
+function updateCouncilName() {
+  if (!state.nameEdited) $("council-name").value = councilAutoName(currentCouncil());
+}
+// Seat a saved council: manual mode, its seats, its type and settings.
+function applyCouncil(c, label) {
+  const missing = c.seats.filter((x) => !state.catalog.some((m) => m.id === x.modelId));
+  state.chosen = c.seats
+    .filter((x) => !missing.includes(x))
+    .map((x, i) => ({ seat: i + 1, modelId: x.modelId, temperature: x.temperature ?? null, gender: x.gender ?? null, age: x.age ?? null }));
+  setMode("manual", false);
+  const radio = document.querySelector(`input[name="council-type"][value="${COUNCIL_TYPES[c.type] ? c.type : "debate"}"]`);
+  radio.checked = true;
+  if (Number.isFinite(c.rounds)) $("rounds").value = c.rounds;
+  if (Number.isFinite(c.timeout)) $("timeout").value = c.timeout;
+  if (typeof c.webResearch === "boolean") $("web-research").checked = c.webResearch;
+  if (typeof c.addInstruction === "boolean") $("add-instruction").checked = c.addInstruction;
+  state.nameEdited = !!label;
+  if (label) $("council-name").value = label;
+  syncTypeControls();
+  renderModelRows();
+  renderMembers();
+  savedMsg(missing.length
+    ? `Loaded "${label || councilAutoName(c)}". ${missing.length} member(s) are no longer on OpenRouter and were left out: ${missing.map((x) => x.name).join(", ")}.`
+    : `Loaded "${label || councilAutoName(c)}" with ${c.seats.length} members.`, missing.length ? "warn" : "ok");
+}
+function councilFromRun(run) {
+  return run.council || councilSnapshot(run.members, {
+    type: run.type || "debate", rounds: run.rounds, timeout: run.timeoutSec,
+    webResearch: !!run.webResearch, addInstruction: run.addInstruction ?? true,
+  });
+}
+
+async function saveCouncil() {
+  const council = currentCouncil();
+  if (council.seats.length < 2) { savedMsg("Seat at least 2 members first.", "bad"); return; }
+  const name = $("council-name").value.trim() || councilAutoName(council);
+  try {
+    await dbPut("councils", { id: newId("c"), name, savedAt: new Date().toISOString(), council });
+    savedMsg(`Saved the council "${name}".`, "ok");
+    state.nameEdited = false;
+    updateCouncilName();
+    renderSaved();
+  } catch (e) {
+    savedMsg(`Could not save in this browser: ${e.message || e}. Use "Download council" instead.`, "bad");
+  }
+}
+
+// Saves the current run. The record holds the run without the key, and its council.
+async function saveRun() {
+  const run = state.run;
+  if (!run?.finalAnswer) return;
+  try {
+    const data = JSON.parse(runJson());
+    data.saved = true;
+    await dbPut("runs", {
+      id: run.savedId || (run.savedId = newId("r")), name: run.name || run.question.slice(0, 60),
+      savedAt: new Date().toISOString(), run: data,
+    });
+    run.saved = true;
+    $("btn-save-run").textContent = "Saved";
+    $("btn-save-run").disabled = true;
+    log(`Saved as "${run.name}" in this browser.`);
+    renderSaved();
+  } catch (e) {
+    log(`Could not save the run in this browser: ${e.message || e}. Use "Download everything" instead.`);
+  }
+}
+
+// The chair names the run. Falls back to the start of the question.
+function titlePrompt(question, answer) {
+  return [
+    "You chaired a council of AI experts. Give the council's answer below a short, clear title of at most 8 words.",
+    "Reply with the title only: no quotes, no full stop, no markdown.\n",
+    `Question: "${question}"\n`,
+    "Answer:",
+    answer.slice(0, 6000),
+  ].join("\n");
+}
+function cleanTitle(text) {
+  const line = String(text).split("\n").map((x) => x.trim()).find(Boolean) || "";
+  return line.replace(/^#+\s*/, "").replace(/^(title:\s*)/i, "").replace(/[*_`"“”]/g, "").replace(/\.$/, "").trim().slice(0, 90);
+}
+async function chairTitle(chair, question, answer, timeoutSec) {
+  try {
+    const r = await callModel(chair, titlePrompt(question, answer), "Phase 6: Title", Math.min(timeoutSec, 120));
+    const title = cleanTitle(r.content);
+    if (title) { log(`The chair named this run: "${title}"`); return title; }
+  } catch (e) {
+    if (state.controller.signal.aborted) throw e;
+    log(`The chair could not name the run: ${e.message}`);
+  }
+  const name = question.length > 60 ? question.slice(0, 57) + "..." : question;
+  log(`Named the run after the question instead: "${name}"`);
+  return name;
+}
+
+function openRun(data) {
+  state.run = data;
+  $("run-area").classList.remove("hidden");
+  $("progress").classList.add("hidden");
+  $("phases").innerHTML = `<p class="hint">A saved run. Every step, answer and vote is in "Download everything (.json)".</p>`;
+  $("log").textContent = "";
+  showResults();
+  $("run-area").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+async function renderSaved() {
+  let councils = [], runs = [];
+  try {
+    [councils, runs] = await Promise.all([dbAll("councils"), dbAll("runs")]);
+  } catch (e) {
+    savedMsg(`This browser cannot save here: ${e.message || e}. You can still download and open files.`, "warn");
+  }
+  const byDate = (a, b) => b.savedAt.localeCompare(a.savedAt);
+  const when = (iso) => new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  const item = (name, details, buttons) => {
+    const li = document.createElement("li");
+    li.innerHTML = `<div class="saved-name"></div><div class="hint"></div><div class="row"></div>`;
+    li.querySelector(".saved-name").textContent = name;
+    li.querySelector(".hint").textContent = details;
+    for (const [label, fn] of buttons) {
+      const b = document.createElement("button");
+      b.textContent = label;
+      b.onclick = fn;
+      li.querySelector(".row").appendChild(b);
+    }
+    return li;
+  };
+  const cl = $("saved-councils");
+  cl.innerHTML = councils.length ? "" : `<li class="hint">No saved councils yet.</li>`;
+  for (const rec of councils.sort(byDate)) {
+    const c = rec.council;
+    cl.appendChild(item(rec.name, `${c.seats.length} members · ${(COUNCIL_TYPES[c.type] || COUNCIL_TYPES.debate).label} · saved ${when(rec.savedAt)}`, [
+      ["Load", () => applyCouncil(c, rec.name)],
+      ["Download", () => download(`${fileSlug(rec.name, "council")}.json`, JSON.stringify({ kind: "council", version: 1, name: rec.name, council: c }, null, 2), "application/json")],
+      ["Delete", async () => { if (confirm(`Delete the saved council "${rec.name}"?`)) { await dbDelete("councils", rec.id); renderSaved(); } }],
+    ]));
+  }
+  const rl = $("saved-runs");
+  rl.innerHTML = runs.length ? "" : `<li class="hint">No saved runs yet.</li>`;
+  for (const rec of runs.sort(byDate)) {
+    const r = rec.run;
+    const cost = (r.calls || []).reduce((a, c) => a + (c.cost || 0), 0);
+    rl.appendChild(item(rec.name, `${r.question.length > 80 ? r.question.slice(0, 77) + "..." : r.question} · ${(COUNCIL_TYPES[r.type] || COUNCIL_TYPES.debate).label}, ${r.members.length} members · ${money(cost)}${r.practice ? " · practice" : ""} · ${when(rec.savedAt)}`, [
+      ["Open", async () => { const full = await dbGet("runs", rec.id); openRun({ ...full.run, savedId: rec.id, saved: true }); }],
+      ["Load its council", () => applyCouncil(councilFromRun(r), null)],
+      ["Download", () => download(`${fileSlug(rec.name, "council-run")}.json`, JSON.stringify(r, null, 2), "application/json")],
+      ["Delete", async () => { if (confirm(`Delete the saved run "${rec.name}"?`)) { await dbDelete("runs", rec.id); renderSaved(); } }],
+    ]));
+  }
+}
+
+// Opens a council file or a run file, and keeps it in the browser too.
+async function importFile(e) {
+  const file = e.target.files?.[0];
+  e.target.value = "";
+  if (!file) return;
+  try {
+    const data = JSON.parse(await file.text());
+    if (data.kind === "council" && Array.isArray(data.council?.seats)) {
+      applyCouncil(data.council, data.name);
+      await dbPut("councils", { id: newId("c"), name: data.name || councilAutoName(data.council), savedAt: new Date().toISOString(), council: data.council });
+    } else if (Array.isArray(data.members) && data.finalAnswer && data.chair) {
+      // A run file. Older files have no "kind" and no name.
+      delete data.key;
+      const id = newId("r");
+      const name = data.name || (data.question || "Council run").slice(0, 60);
+      await dbPut("runs", { id, name, savedAt: new Date().toISOString(), run: { ...data, name } });
+      openRun({ ...data, name, savedId: id, saved: true });
+      savedMsg(`Opened the run "${name}".`, "ok");
+    } else {
+      throw new Error("this is not a council or a council run file");
+    }
+    renderSaved();
+  } catch (err) {
+    savedMsg(`Could not open ${file.name}: ${err.message || err}`, "bad");
+  }
 }
 
 // ---------- Downloads ----------
@@ -1596,7 +1893,7 @@ function answerMarkdown() {
   const sourceMd = sources.length
     ? `\n## Web sources the council read\n\n${sources.map((x, i) => `${i + 1}. [${x.title.replace(/[\[\]]/g, "")}](${x.url})`).join("\n")}\n`
     : "";
-  return `# The Council of AI\n\n**Question:** ${run.question}\n\n**Chair:** ${run.chair.name}\n\n**Council:** ${COUNCIL_TYPES[run.type].label}, ${run.members.length} members, ${run.rounds} round(s), web research ${run.webResearch ? "on" : "off"}${run.practice ? ". PRACTICE RUN, made-up answers" : ""}\n\n**Date:** ${run.startedAt}\n\n---\n\n${run.finalAnswer}\n\n---\n\n## The council\n\n${table}\n${sourceMd}`;
+  return `# ${run.name || "The Council of AI"}\n\n*The Council of AI*\n\n**Question:** ${run.question}\n\n**Chair:** ${run.chair.name}\n\n**Council:** ${COUNCIL_TYPES[run.type].label}, ${run.members.length} members, ${run.rounds} round(s), web research ${run.webResearch ? "on" : "off"}${run.practice ? ". PRACTICE RUN, made-up answers" : ""}\n\n**Date:** ${run.startedAt}\n\n---\n\n${run.finalAnswer}\n\n---\n\n## The council\n\n${table}\n${sourceMd}`;
 }
 function callLogCsv() {
   const esc = (s) => { s = String(s ?? ""); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
@@ -1608,7 +1905,7 @@ function callLogCsv() {
 }
 function runJson() {
   const { key, ...rest } = state.run; // never save the key
-  return JSON.stringify({ ...rest, members: rest.members.map(({ key, id, name, cls, score, pIn, pOut, temperature, gender, age }) => ({ key, id, name, cls, score, pIn, pOut, temperature, gender, age })) }, null, 2);
+  return JSON.stringify({ kind: "council-run", version: 1, ...rest, members: rest.members.map(({ key, id, name, cls, score, pIn, pOut, temperature, gender, age }) => ({ key, id, name, cls, score, pIn, pOut, temperature, gender, age })) }, null, 2);
 }
 
 // ---------- Wiring ----------
@@ -1651,9 +1948,20 @@ function init() {
   $("btn-start").onclick = startCouncil;
   $("btn-stop").onclick = () => state.controller?.abort(new DOMException("Stopped", "AbortError"));
   $("btn-print").onclick = () => window.print();
-  $("btn-dl-answer").onclick = () => download(`council-answer_${stamp()}.md`, answerMarkdown(), "text/markdown");
-  $("btn-dl-log").onclick = () => download(`council-calls_${stamp()}.csv`, callLogCsv(), "text/csv");
-  $("btn-dl-run").onclick = () => download(`council-run_${stamp()}.json`, runJson(), "application/json");
+  $("btn-dl-answer").onclick = () => download(`${fileSlug(state.run.name, "council-answer")}_${stamp()}.md`, answerMarkdown(), "text/markdown");
+  $("btn-dl-log").onclick = () => download(`${fileSlug(state.run.name, "council")}_calls_${stamp()}.csv`, callLogCsv(), "text/csv");
+  $("btn-dl-run").onclick = () => download(`${fileSlug(state.run.name, "council-run")}_${stamp()}.json`, runJson(), "application/json");
+  $("btn-save-run").onclick = () => saveRun();
+  $("btn-save-council").onclick = saveCouncil;
+  $("btn-dl-council").onclick = () => {
+    const c = currentCouncil();
+    const name = $("council-name").value.trim() || councilAutoName(c);
+    download(`${fileSlug(name, "council")}.json`, JSON.stringify({ kind: "council", version: 1, name, council: c }, null, 2), "application/json");
+  };
+  $("btn-import").onclick = () => $("import-file").click();
+  $("import-file").addEventListener("change", importFile);
+  $("council-name").addEventListener("input", () => { state.nameEdited = $("council-name").value.trim() !== ""; });
+  renderSaved();
   window.addEventListener("beforeunload", (e) => { if (state.running) { e.preventDefault(); e.returnValue = ""; } });
 
   setMode(state.mode, false);
